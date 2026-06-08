@@ -1,0 +1,159 @@
+import { FileDown } from 'lucide-react'
+import jsPDF from 'jspdf'
+import { format } from 'date-fns'
+import { getState } from '@/store/localStorage'
+import {
+  getTodayString, getDayNumber, getWeekNumber, getExamCycle,
+  getCurrentStreak, getTotalFinesOwed, getExamDate,
+} from '@/store/dateLogic'
+
+export function ExportButton() {
+  function handleExport() {
+    const state = getState()
+    const today = getTodayString()
+    const todayLog = state.dailyLogs.find(l => l.date === today)
+    const dayNum = state.startDate ? getDayNumber(state.startDate, today) : null
+    const weekNum = state.startDate ? getWeekNumber(state.startDate, today) : null
+    const cycle = state.startDate ? getExamCycle(state.startDate, today, state.exams) : 1
+    const streak = getCurrentStreak(state.dailyLogs)
+    const finesOwed = getTotalFinesOwed(state.penalties)
+    const nextExamDate = state.startDate ? getExamDate(state.startDate, cycle + 1, state.exams) : '—'
+
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+
+    const W = 210
+    const MARGIN = 20
+    let y = 20
+
+    function line(text: string, x = MARGIN, size = 10, style: 'normal' | 'bold' = 'normal', color: [number, number, number] = [30, 30, 50]) {
+      doc.setFontSize(size)
+      doc.setFont('helvetica', style)
+      doc.setTextColor(...color)
+      doc.text(text, x, y)
+      y += size * 0.45 + 2
+    }
+
+    function gap(h = 4) { y += h }
+
+    function rule(r = 200, g = 200, b = 220) {
+      doc.setDrawColor(r, g, b)
+      doc.line(MARGIN, y, W - MARGIN, y)
+      y += 4
+    }
+
+    // Header
+    doc.setFillColor(15, 20, 45)
+    doc.rect(0, 0, W, 35, 'F')
+    doc.setFontSize(18)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
+    doc.text('DevTrack Daily Report', MARGIN, 16)
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(150, 160, 200)
+    doc.text(format(new Date(), 'EEEE, MMMM d, yyyy'), MARGIN, 26)
+    y = 45
+
+    // Meta row
+    line(`Day ${dayNum ?? '—'} of 65  ·  Week ${weekNum ?? '—'} of 13  ·  Cycle ${cycle} of 6  ·  Streak: ${streak} days`, MARGIN, 10, 'normal', [80, 100, 180])
+    rule()
+
+    // Timer status
+    gap(2)
+    if (todayLog?.timerCompleted) {
+      line('SESSION TIMER', MARGIN, 9, 'bold', [100, 200, 120])
+      line('60-minute session completed ✓', MARGIN, 10, 'normal', [60, 160, 80])
+    } else {
+      line('SESSION TIMER', MARGIN, 9, 'bold', [200, 80, 80])
+      line('Session not completed today', MARGIN, 10, 'normal', [180, 60, 60])
+    }
+    gap(3)
+    rule()
+
+    // Daily log notes
+    if (todayLog) {
+      gap(2)
+      line('DAILY LOG', MARGIN, 9, 'bold', [99, 102, 241])
+      gap(2)
+
+      const sections = [
+        { label: 'SQL', notes: todayLog.sqlNotes, color: [60, 120, 220] as [number,number,number] },
+        { label: 'Linux', notes: todayLog.linuxNotes, color: [40, 180, 100] as [number,number,number] },
+        { label: 'Kubernetes', notes: todayLog.k8sNotes, color: [220, 140, 60] as [number,number,number] },
+      ]
+      for (const s of sections) {
+        if (s.notes.trim()) {
+          line(s.label, MARGIN, 9, 'bold', s.color)
+          const wrapped = doc.splitTextToSize(s.notes, W - MARGIN * 2 - 5)
+          doc.setFontSize(9)
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(80, 90, 110)
+          for (const wl of wrapped) {
+            doc.text(wl, MARGIN + 4, y)
+            y += 5
+          }
+          gap(2)
+        }
+      }
+      line(`Self-rating: ${todayLog.selfRating}/5`, MARGIN, 9, 'normal', [100, 100, 140])
+      gap(2)
+      rule()
+    } else {
+      gap(2)
+      line('DAILY LOG', MARGIN, 9, 'bold', [180, 80, 80])
+      line('No log submitted today.', MARGIN, 10, 'normal', [150, 60, 60])
+      gap(2)
+      rule()
+    }
+
+    // Week completion
+    gap(2)
+    line('THIS WEEK', MARGIN, 9, 'bold', [99, 102, 241])
+    gap(2)
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+    const logDates = new Set(state.dailyLogs.map(l => l.date))
+    // Find dates for this week
+    const now = new Date()
+    const dow = now.getDay() || 7
+    let dotLine = ''
+    for (let d = 1; d <= 5; d++) {
+      const diff = d - dow
+      const dt = new Date(now)
+      dt.setDate(dt.getDate() + diff)
+      const ds = format(dt, 'yyyy-MM-dd')
+      dotLine += `${weekdays[d - 1]}: ${logDates.has(ds) ? '●' : '○'}  `
+    }
+    line(dotLine, MARGIN, 10, 'normal', [80, 100, 180])
+    gap(4)
+    rule()
+
+    // Financials
+    gap(2)
+    line('FINANCIALS', MARGIN, 9, 'bold', [99, 102, 241])
+    gap(2)
+    line(`Fines Owed: PKR ${finesOwed.toLocaleString()}`, MARGIN, 10, 'normal', finesOwed > 0 ? [200, 60, 60] : [60, 160, 80])
+    gap(1)
+    line(`Next Exam Date: ${nextExamDate}`, MARGIN, 10, 'normal', [80, 100, 180])
+    gap(4)
+    rule()
+
+    // Footer
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(120, 130, 160)
+    doc.text(`Generated by DevTrack · ${format(new Date(), 'HH:mm')}`, MARGIN, 287)
+    doc.text(state.settings.learnerName, W - MARGIN, 287, { align: 'right' })
+
+    doc.save(`devtrack-${today}.pdf`)
+  }
+
+  return (
+    <button
+      onClick={handleExport}
+      className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 text-sm font-medium transition-colors"
+    >
+      <FileDown size={15} />
+      Export Today's Report
+    </button>
+  )
+}
