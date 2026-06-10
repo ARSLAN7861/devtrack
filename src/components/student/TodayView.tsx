@@ -42,22 +42,23 @@ export function TodayView() {
 
   const dayNum = getDayNumber(state.startDate, today)
   const existingLog = state.dailyLogs.find(l => l.date === today)
-  const alreadyCompleted = existingLog?.timerCompleted ?? false
   const streak = getCurrentStreak(state.dailyLogs)
   const longest = getLongestStreak(state.dailyLogs)
 
-  // Timer state
   const [timerStartedAt, setTimerStartedAt] = useState(existingLog?.timerStartedAt ?? '')
-  const [timerCompletedAt, setTimerCompletedAt] = useState(existingLog?.timerCompletedAt ?? '')
-  const [timerDone, setTimerDone] = useState(alreadyCompleted)
+  const [timerElapsed, setTimerElapsed] = useState(0)
   const [showQuiz, setShowQuiz] = useState(false)
   const currentCycle = getExamCycle(state.startDate, today, state.exams)
 
-  function handleTimerComplete(startedAt: string, completedAt: string) {
+  function handleTimerUpdate(startedAt: string, elapsedSeconds: number) {
     setTimerStartedAt(startedAt)
-    setTimerCompletedAt(completedAt)
-    setTimerDone(true)
+    setTimerElapsed(elapsedSeconds)
   }
+
+  // Elapsed seconds from an already-saved log (to show in read-only timer)
+  const existingElapsed = existingLog?.timerStartedAt && existingLog?.timerCompletedAt
+    ? Math.round((new Date(existingLog.timerCompletedAt).getTime() - new Date(existingLog.timerStartedAt).getTime()) / 1000)
+    : undefined
 
   const dayContent = dayNum ? getDayContent(dayNum) : null
 
@@ -98,16 +99,14 @@ export function TodayView() {
 
       {/* Timer */}
       <SessionTimer
-        alreadyCompleted={alreadyCompleted}
-        onComplete={handleTimerComplete}
-        adminOverride
+        onUpdate={handleTimerUpdate}
+        existingElapsed={existingElapsed}
       />
 
       {/* Log form */}
       <DailyLogForm
-        unlocked={timerDone}
         timerStartedAt={timerStartedAt}
-        timerCompletedAt={timerCompletedAt}
+        timerElapsed={timerElapsed}
         onSaved={() => setRefreshKey(k => k + 1)}
       />
     </div>

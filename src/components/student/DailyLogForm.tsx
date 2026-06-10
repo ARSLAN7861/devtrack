@@ -1,19 +1,18 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
-import { CheckCircle, Lock } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
 import { saveLog, getLogForDate } from '@/store/localStorage'
 import { getDayNumber, getTodayString } from '@/store/dateLogic'
 import type { DailyLog } from '@/store/types'
 import { getState } from '@/store/localStorage'
 
 interface Props {
-  unlocked: boolean
   timerStartedAt: string
-  timerCompletedAt: string
+  timerElapsed: number
   onSaved: () => void
 }
 
-export function DailyLogForm({ unlocked, timerStartedAt, timerCompletedAt, onSaved }: Props) {
+export function DailyLogForm({ timerStartedAt, timerElapsed, onSaved }: Props) {
   const today = getTodayString()
   const existing = getLogForDate(today)
   const state = getState()
@@ -27,34 +26,23 @@ export function DailyLogForm({ unlocked, timerStartedAt, timerCompletedAt, onSav
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    const completedAt = new Date().toISOString()
     const log: DailyLog = {
       id: existing?.id ?? Math.random().toString(36).slice(2) + Date.now().toString(36),
       date: today,
       dayNumber: dayNum,
       timerCompleted: true,
-      timerStartedAt,
-      timerCompletedAt,
+      timerStartedAt: timerStartedAt || completedAt,
+      timerCompletedAt: completedAt,
       sqlNotes,
       linuxNotes,
       k8sNotes,
       selfRating: rating,
-      hoursLogged: 1,
+      hoursLogged: timerElapsed / 3600,
     }
     saveLog(log)
     setSaved(true)
     onSaved()
-  }
-
-  if (!unlocked && !existing) {
-    return (
-      <div className="rounded-xl border border-[#1a2235] bg-[#111827] p-6 flex items-center gap-4 opacity-60">
-        <Lock size={20} className="text-slate-600 shrink-0" />
-        <div>
-          <p className="text-slate-400 font-medium">Daily Log Locked</p>
-          <p className="text-sm text-slate-600">Complete the 60-minute timer to unlock the log form.</p>
-        </div>
-      </div>
-    )
   }
 
   const displayDate = format(new Date(), 'EEEE, MMMM d')
